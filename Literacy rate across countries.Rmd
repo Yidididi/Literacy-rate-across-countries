@@ -1,0 +1,329 @@
+---
+title: "Literacy rate - R"
+author: "Yidi Kang-03:30-05:30"
+date: "March 28, 2019"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+require(tidyverse)
+require(gridExtra)
+require(leaps)
+
+```
+# Abstract
+
+This study mainly explore possible explanatory factors that are related with literacy rate across countries. We will use multi-regression models to find the hidden relationships. According to missing data and model hypothesis, we finally include 49 countries for our study. Our result shows that 3 factors are strongly related with literacy rate for a country, they are "School complete rate", "GDP per capita" and " Fertility rate".
+
+# Introduction
+
+Nowadays, education has become a popularly debated topic for most countries, and literacy rate is one of the basic part of education achievement.
+A country/ area's literacy rate is calculated by total number of literate persons divided by total number of population for a given age range. In our study, the literacy rate is for many countries across the world and the age range is above 15. 
+We are doing this study about literacy rate is because literacy rate is a very important sign for a country's primary education level, people's quality level and even people's life-quality level. In our study, we are trying to use data from World Bank to explore important variables that can have impact on literacy rate. By doing so, we hope we can give some insights to government about which part we should work on in current condition, and find the best and most practical solution for a country.
+
+# Data
+
+## Data Source:
+All data in our research are from World Bank :https://data.worldbank.org/indicator
+
+## Variables:
+To determine which variables we want to test in our study, I decided to analyzing low literacy rate from 3 aspects.
+
+First is the literacy cost and current education situation for people to become literacy. This part I include 3 variables.
+
+1.Government expenditure per student, primary (% of GDP per capita)
+From government side, one of the non-literate reason for a people is her/his family cannot afford the education cost (tuition fee or time spent), so the government expenditure per student may give us some insights on whether the education-spent is sufficient for reducing literacy rate.
+
+2.Primary completion rate, total (% of relevant age group)
+The literacy rate is a sign for primary education of a country/ area, so direct variable such as primary completion rate may be the most significant reason for literacy rate.
+
+3.School enrollment, primary (% gross)
+The literacy rate is a sign for primary education of a country/ area, but I also wanna compare the difference between primary completion and primary enrollment, to see if there are obvious difference.
+
+Second is whether the living environment (like economic or cultural condition) disable or discourage people in a country to literate. There are 5 variables in this part.
+
+4.Rural population (% of total population)
+Comparing to Rural area with Urban, one of the most significant difference is education for students, the rural area may lack of teachers or other resources to support all children's education. So more percent of rural population may lead to lower literacy rate.
+
+5.Population, total
+If a country's population is way beyond it's capacity, then how to survive will become the primary concern for both people and government, so the education part may be overlooked.
+
+6.GDP per capita (current US$)
+GDP is an important sign for a country's economic development, and we should more focusing on GDP per capita, because what we really care about is how is everyone's economic situation in a country, like whether the GDP per capita is sufficient for one to finish primary education.
+
+7.Fertility rate, total (births per woman)
+In a way, the fertility rate is similar to population of a country, but what is different is that it focusing more on whether the population growth is beyond control or capacity, which will affect a country's education ability a lot.
+
+8.Life expectancy at birth, total (years)
+Comparing 50 years' life expectancy to 80 years expectancy, there is more chance that it stands for the whole society's progress, people will more likely not spend their whole life struggling with hunger and disease, but have more time to receive education.
+
+Third part includes self-willing and self-oriented, which includes 2 variables
+
+9.Labor force, total
+The labor force rate (or we can use unemployment rate) is an indicator whether of education level and labor demand. For example, if a country's labor rate is really low, surviving will become the first concern and people will lost motivation to learn or let children learn.
+
+10.Income share held by lowest 20%
+Low income for a family usually leads to not enough money for children's education or need children to work early. Focusing on the lowest 20% part may give us better insights of whether the lowest income contribute to non-literacy most.
+
+```{r, echo=FALSE,message = FALSE, warnings = FALSE}
+data = read_delim("10 features for literacy rate 2014.csv",delim=",")
+data = data[0:217,c(3,5,6,7,8,9,10,11,12,13,14,15)]
+data[data == ".."]<- NA
+
+data$`Rural p`<- as.numeric(data$`Rural p`)
+data$`School r`<-as.numeric(data$`School r`)
+data$`Fertility r`<-as.numeric(data$`Fertility r`)
+data$`Pop t` <- as.numeric(data$`Pop t`)
+data$`GDP p`<- as.numeric(data$`GDP p`)
+data$`expend p`<-as.numeric(data$`expend p`)
+data$`labor t`<- as.numeric(data$`labor t`)
+data$`complete r`<-as.numeric(data$`complete r`)
+data$eLife <- as.numeric(data$eLife)
+data$`20%low income` <- as.numeric(data$`20%low income`)
+data$`Literacy rate` <- as.numeric(data$`Literacy rate`)
+
+```
+## Summary of our explainatory variables
+First, we check NA values of our data.
+
+```{r, results=FALSE,echo=FALSE}
+summary(is.na(data[,c(2,3,4,5,6,7,8,9,10,11,12)]))
+```
+
+Second, we check summary information for all variables.
+
+```{r, echo=FALSE}
+sapply(data[,c(2,3,4,5,6,7,8,9,10,11,12)], summary)
+```
+## Data Cleaning
+For literacy rate, since this is our must-have response variable, we are going to drop NA in this variable.
+
+For GDP per cap, population total, labor force, we are going to remove countries which has NA in these variables. Because I think these are very important basic that we can look at a specific country's literacy rate.
+
+For school enrollment rate, primary completion rate, gorvernment expend, lowest 20% income we are going to use mean to make up all the NA values
+
+Also, since Rural rate is a better index than Rural total, we also need to change this variable.
+
+```{r, result = FALSE, echo=FALSE}
+data <- drop_na(data,var = "Literacy rate")
+data <- drop_na(data,var = c("Pop t","GDP p","labor t"))
+data$`School r`[is.na(data$`School r`)] <- mean(na.omit(data$`School r`))
+data$`complete r`[is.na(data$`complete r`)] <- mean(na.omit(data$`complete r`))
+data$`expend p`[is.na(data$`expend p`)] <- mean(na.omit(data$`expend p`))
+data$`20%low income`[is.na(data$`20%low income`)] <- mean(na.omit(data$`20%low income`))
+data$`Rural p`<-data$`Rural p`/data$`Pop t`*100
+```
+## Study year I choose
+I choose 2014's data as my resource, first, I wanna focus more on current literacy rate, second, in this year, we can have more non-NA literacy rate examples in study.
+
+## Study countries I choose
+"Indonesia""Brazil""Pakistan""Bangladesh""Mexico""Iran,IslamicRep.""Turkey""SouthAfrica""Colombia""Spain""Kenya""Argentina""Peru""Uzbekistan""Angola""Coted'Ivoire""BurkinaFaso""Malawi""Guatemala""Ecuador""Zimbabwe""Cambodia""Guinea""Rwanda""Tunisia""DominicanRepublic""Burundi""Hungary""Azerbaijan""Honduras""Tajikistan""Paraguay""Singapore""Turkmenistan""WestBankandGaza""Oman""Georgia""Uruguay""Jamaica""Botswana""Lesotho""Slovenia""GuineaBissau""Mauritius""EquatorialGuinea""Guyana""Maldives""Barbados""Vanuatu"   
+
+# Methods
+## Model building summary
+transformation:
+
+According to the scatter plot of all explainatory variables and response variable, the population, GDP and labor are not linearly related with literacy rate.So I decide to use log(Pop t), log(GDP p), and log(labor t) to transform data. We can see after transformation, the relationship between these 3 variables and y are more linearly related.
+
+Relevent Plots:
+
+```{r, fig.width=8,fig.height=3.5, echo=FALSE}
+p1 <- data %>% ggplot(aes(x = data$'Rural p',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("Rural p and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p2 <- data %>% ggplot(aes(x = data$'School r',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("School r and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p3 <- data %>% ggplot(aes(x = data$'Fertility r',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("Fertility r and literacy rate") +
+  theme(plot.title = element_text(size=13))
+p4 <- data %>% ggplot(aes(x = data$'Pop t',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("Pop t and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p5 <- data %>% ggplot(aes(x = data$'GDP p',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("GDP p and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p6 <- data %>% ggplot(aes(x = data$'expend p',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("expend p and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p7 <- data %>% ggplot(aes(x = data$'labor t',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("labor t and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p8 <- data %>% ggplot(aes(x = data$'complete r',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("complete r and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p9 <- data %>% ggplot(aes(x = data$'eLife',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("eLife and literacy rate")+
+  theme(plot.title = element_text(size=13))
+p10 <- data %>% ggplot(aes(x = data$'20%low income',y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("20%low income and literacy rate")+
+  theme(plot.title = element_text(size=13))
+
+lp4 <- data %>% ggplot(aes(x = log(data$'Pop t'),y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("log(Pop t) and literacy rate")+
+  theme(plot.title = element_text(size=13))
+lp5 <- data %>% ggplot(aes(x = log(data$'GDP p'),y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("log(GDP p) and literacy rate")+
+  theme(plot.title = element_text(size=13))
+lp7 <- data %>% ggplot(aes(x = log(data$'labor t'),y = data$'Literacy rate'))+
+  geom_point(pch=19,size = 2)+
+  ggtitle("log(labor t) and literacy rate")+
+  theme(plot.title = element_text(size=13))
+grid.arrange(p1,p2,p3,lp4,lp5,ncol = 3)
+grid.arrange(p6,lp7,p8,p9,p10,ncol = 3)
+```
+
+Collinearity check: correlation matrix
+
+```{r, echo=FALSE}
+round(cor(data[,c(2,3,4,5,6,7,8,9,10,11)]),2)
+```
+
+From the correlation matrix, we can see there are 3 pairs of variables have high correlation
+
+school r with complete r of 0.734; eLife and Fertility r of -0.819; Pop t and labor r of 0.986
+
+by comparing 3 pairs RMSE, I decide to remove 3 variables (school r, eLife, Pop t) with slightly higher RMSE.
+
+```{r, results = FALSE, echo=FALSE}
+lm.school <- lm(data$"Literacy rate"~data$"School r",data = data)
+summary(lm.school)
+lm.com <- lm(data$"Literacy rate"~data$"complete r",data = data)
+summary(lm.com)
+
+lm.el <- lm(data$`Literacy rate`~data$eLife,data = data)
+summary(lm.el)
+lm.fer <- lm(data$`Literacy rate`~data$"Fertility r",data = data)
+summary(lm.fer)
+
+lm.pop <- lm(data$`Literacy rate`~data$`Pop t`,data = data)
+summary(lm.pop)
+lm.lab <- lm(data$`Literacy rate`~data$`labor t`,data = data)
+summary(lm.lab)
+```
+
+Variable selection:
+
+```{r, results = FALSE, echo=FALSE}
+forward.step <- regsubsets(data$"Literacy rate"~data$"Rural p"+log(data$"GDP p")+data$"expend p"+log(data$"labor t" )+data$"Fertility r"+data$"complete r"+data$"20%low income", data=data, method="forward", nvmax=12)
+summary(forward.step)
+```
+
+So I started with a 5 variavble model, check the significance for each variable, and reduce not significant variables.
+
+```{r, results = FALSE, echo=FALSE}
+lm.5 <- lm(data$"Literacy rate"~data$"complete r"+log(data$"GDP p")+data$"Fertility r"+log(data$"labor t")+data$"20%low income",data=data)
+summary(lm.5)
+
+# 4 variavble model
+lm.4 <- lm(data$"Literacy rate"~data$"complete r"+log(data$"GDP p")+data$"Fertility r"+log(data$"labor t"),data=data)
+summary(lm.4)
+# There are still variables not significant
+
+# 3 variavble model
+lm.3 <- lm(data$"Literacy rate"~data$"complete r"+log(data$"GDP p")+data$"Fertility r",data=data)
+summary(lm.3)
+```
+
+Finally we got a model of 3 variables with all significance smaller than 0.05
+
+## Assumption check
+1. x variables are fixed and no error
+
+All the x variables are from gorvernment investigation and with the same scale, which ensured it's accuracy
+
+2. E(e) = 0
+
+Our OLS ensured this
+
+Below is a plot to check constant variance and Normality Assumption.
+
+```{r, fig.width = 3, fig.height= 3,echo=FALSE}
+p.1 <- plot(lm.3,which = 1)
+p.2 <- plot(lm.3,which = 2)
+p.3 <- plot(lm.3,which = 3)
+p.4 <- plot(lm.3,which = 4)
+```
+
+3.constant Variance
+
+From 1st and 3rd of p.a, we can see that after standerlization, the reasidual still follows a tend of decreasing
+
+so we kind of voilated the constant variance assumption
+
+4. Normality of standarlized residuals
+
+According to 2nd normal Q-Q plot, we can see that the standardized residuals are almost normally distributed.
+
+5. Independence
+
+Our data are collected from different countries, so we can say that they are independent to each other
+
+6. correlation of x variables
+
+We already moved variables that have high correlation, so we meet this assumption.
+
+## Model Evaluation
+1.Estimate sigma:
+
+sigma = RMSE = 10.04; However, since we didn't meet constant variance assumption, so we cannot conclude that 95% y values are in Y +/- 2 sigma
+
+2.R^2 and Ra^2
+
+The R^2 of our model is 70.58%, means 70.58% of the variance can be explained by our model; Ra^2 is 68.61%.
+
+## Hypothese test (alpha=0.05)
+1. overall F-test
+
+H0: all beta equals to 0; H1: at least 1 beta is not 0. According to summary of our model, we can see that the Fc is 35.98 with 45 degree of freedom, and the p-value is 5.126*(10^(-12)), which is much smaller than alpha=0.05
+
+2. t-test
+
+H0: beta i equals to 0; H1: beta i is not 0. 
+
+for complete r: test statistic is 3.817 with 48 degree of freedom, and p-value is 0.00041, for log(GDP): test statistic is 2.7 with 48 degree of freedom, and p-value is 0.00964, for fertility r: test statistic is -2.35 with 48 degree of freedom, and p-value is 0.02, all 3 p-values are smaller than 0.05(alpha)
+
+so in 3 hypothesis test, we all reject H0, every slope is statistically significant basing on other variables are already in model.
+
+# Discussion Final
+
+## Final Model:
+```{r, echo=FALSE}
+print(paste("Final model is y = ",round(lm.3$coef[2],digits = 2),"*complete r+",round(lm.3$coef[3],digits = 2),"*log(GDP p)",round(lm.3$coef[4],digits = 2),"* fertility r+",round(lm.3$coef[1],digits = 2)))
+```
+## Interpretation:
+Hold other 2 variables stay, 1 unit(percent) increase in complete rate will increase literacy rate 4.53 units(percent)
+
+Hold other 2 variables stay, if GDP per capita increase by 1% ,literacy rate will increase 0.0453 units(percent)
+
+Hold other 2 variables stay, 1 unit(percent) increase in fertility rate will decrease literacy rate 4.03 percent.
+
+When complete rate, fertilyty rate equal to 0, and GDP per = 1, literacy rate is 8.43%, while this situation is not practical.
+
+## Usefulness
+By building this model, we can get some insights on what is important for a countries literacy rate, and we may use this insights to actually publish relevant rules or find practical solution to improve a countries literacy rate. 
+
+## Improvement
+Since our variables did not fully meet the assumptions (violated the constant variance assumption), next time, we can find more ways to transform our data so that we fit all assumptions.
+
+Also, our model's R^2 now is 71%, we may try more variables to improve the part that can be explained by our model. (Also we need to pay attention to not overfitting)
+
+# Reference
+World Bank : http://data.worldbank.org/indicator
+
+Literacy Rate : https://ourworldindata.org/literacy
